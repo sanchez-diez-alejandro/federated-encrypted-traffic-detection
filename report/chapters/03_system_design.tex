@@ -1,0 +1,184 @@
+\chapter{System Design}\label{ch:system_design}
+
+El presente capítulo describe el diseño del sistema propuesto para la detección de malware basado en análisis de flujo de red. Se detalla la arquitectura, procesamiento de datos, características seleccionadas y decisiones técnicas implementadas.
+
+\section{Dataset}\label{sec:dataset}
+
+\subsection{Descripción General}
+
+Para el desarrollo del sistema se utilizó el dataset \textbf{BBCC CIRA CIC DOHBRW 2020}, un conjunto de datos de referencia en detección de malware basado en características de tráfico de red. El dataset contiene:
+
+\begin{itemize}
+    \item \textbf{Total de instancias}: 499,106 registros
+    \item \textbf{Características}: 28 numéricas + 1 categórica (etiqueta)
+    \item \textbf{Clases}: Benign (benigno) y Malware (malicioso)
+    \item \textbf{Tipo de datos}: Características de flujo de red extraídas de tráfico capturado
+\end{itemize}
+
+\subsection{Análisis Exploratorio de Datos (EDA)}
+
+Se realizó un análisis exploratorio completo del dataset. Las características del flujo de red incluyen:
+
+\begin{itemize}
+    \item \textbf{Características de flujo}: FlowBytesSent, FlowSentRate, FlowBytesReceived, FlowReceivedRate
+    \item \textbf{Características de longitud de paquete}: PacketLengthVariance, PacketLengthStandardDeviation, PacketLengthMean, PacketLengthMedian, PacketLengthMode, PacketLengthSkewFromMedian, PacketLengthSkewFromMode, PacketLengthCoefficientofVariation
+    \item \textbf{Características de tiempo de paquete}: PacketTimeVariance, PacketTimeStandardDeviation, PacketTimeMean, PacketTimeMedian, PacketTimeMode, PacketTimeSkewFromMedian, PacketTimeSkewFromMode, PacketTimeCoefficientofVariation
+    \item \textbf{Características de tiempo de respuesta}: ResponseTimeTimeVariance, ResponseTimeTimeStandardDeviation, ResponseTimeTimeMean, ResponseTimeTimeMedian, ResponseTimeTimeMode, ResponseTimeTimeSkewFromMedian, ResponseTimeTimeSkewFromMode, ResponseTimeTimeCoefficientofVariation
+\end{itemize}
+
+\subsubsection{Estadísticas Descriptivas}
+
+La Tabla~\ref{tab:eda_stats} presenta las estadísticas descriptivas completas del dataset con métricas de centralidad, dispersión y distribución.
+
+\begin{table}[H]
+    \centering
+    \caption{Estadísticas descriptivas del dataset BBCC CIRA CIC DOHBRW 2020}
+    \label{tab:eda_stats}
+    \small
+    \begin{tabular}{|l|r|r|r|r|r|r|r|r|}
+        \hline
+        \textbf{Característica} & \textbf{Count} & \textbf{Mean} & \textbf{Std} & \textbf{Min} & \textbf{25\%} & \textbf{50\%} & \textbf{75\%} & \textbf{Max} \\
+        \hline
+        FlowBytesSent & 499106.0 & 40200.93 & 143961.66 & 5.50e+01 & 618.00 & 1807.00 & 5542.00 & 8.01e+06 \\
+        FlowSentRate & 499106.0 & 47339.15 & 421275.13 & 1.46 & 54.11 & 364.10 & 3810.26 & 2.30e+07 \\
+        FlowBytesReceived & 499106.0 & 42501.56 & 139392.71 & 5.40e+01 & 476.00 & 4827.00 & 7888.00 & 7.72e+06 \\
+        FlowReceivedRate & 499106.0 & 31668.29 & 256680.47 & 1.58 & 141.81 & 461.11 & 4215.50 & 7.60e+06 \\
+        PacketLengthVariance & 499106.0 & 92635.85 & 153493.76 & 0.00 & 469.21 & 18267.89 & 141598.91 & 1.58e+06 \\
+        PacketLengthStdDev & 499106.0 & 220.17 & 210.14 & 0.00 & 21.66 & 135.14 & 376.30 & 1.26e+03 \\
+        PacketLengthMean & 499106.0 & 173.16 & 85.51 & 5.60e+01 & 92.00 & 152.49 & 228.76 & 6.90e+02 \\
+        PacketLengthMedian & 499106.0 & 95.47 & 32.99 & 5.40e+01 & 76.00 & 87.00 & 105.00 & 3.17e+02 \\
+        PacketLengthMode & 499106.0 & 70.75 & 14.83 & 5.40e+01 & 66.00 & 68.00 & 68.00 & 5.53e+02 \\
+        PacketLengthSkewFromMedian & 499106.0 & 0.44 & 1.55 & -1.00 & 0.20 & 0.99 & 1.20 & 2.93 \\
+        PacketLengthSkewFromMode & 499106.0 & 0.33 & 1.12 & -1.00 & 0.41 & 0.48 & 0.71 & 1.43 \\
+        PacketLengthCoefficientofVariation & 499106.0 & 0.99 & 0.67 & 0.00 & 0.25 & 0.88 & 1.64 & 3.10 \\
+        PacketTimeVariance & 499106.0 & 440.11 & 773.07 & 7.23e-11 & 0.13 & 144.32 & 549.98 & 3.55e+03 \\
+        PacketTimeStdDev & 499106.0 & 13.97 & 15.62 & 8.50e-06 & 0.35 & 11.93 & 23.25 & 5.95e+01 \\
+        PacketTimeMean & 499106.0 & 18.45 & 23.80 & 8.50e-06 & 0.35 & 7.87 & 30.82 & 1.13e+02 \\
+        PacketTimeMedian & 499106.0 & 16.47 & 25.16 & 1.00e-06 & 0.07 & 0.21 & 30.46 & 1.19e+02 \\
+        PacketTimeMode & 499106.0 & 1.82 & 9.77 & 0.00 & 0.00 & 0.00 & 0.02 & 1.20e+02 \\
+        PacketTimeSkewFromMedian & 499106.0 & 0.27 & 1.32 & -2.85e+00 & -0.39 & 0.15 & 1.52 & 2.85 \\
+        PacketTimeSkewFromMode & 499106.0 & 1.26 & 0.71 & -5.27e+00 & 0.41 & 1.28 & 1.77 & 1.26 \\
+        PacketTimeCoefficientofVariation & 499106.0 & 0.97 & 0.52 & 7.72e-02 & 0.58 & 0.75 & 1.52 & 5.61 \\
+        ResponseTimeTimeVariance & 499106.0 & 1.71 & 11.11 & 0.00 & 0.00 & 0.00 & 0.00 & 6.47e+02 \\
+        ResponseTimeTimeStdDev & 499106.0 & 0.32 & 1.24 & 0.00 & 0.00 & 0.01 & 0.02 & 2.54e+01 \\
+        ResponseTimeTimeMean & 499106.0 & 0.44 & 2.07 & 4.88e-06 & 0.01 & 0.02 & 0.02 & 2.80e+00 \\
+        ResponseTimeTimeMedian & 499106.0 & 0.39 & 2.35 & 2.00e-06 & 0.01 & 0.02 & 0.02 & 2.80e+00 \\
+        ResponseTimeTimeMode & 499106.0 & 0.21 & 1.72 & -1.00e-06 & 0.00 & 0.02 & 0.02 & 2.80e+00 \\
+        ResponseTimeTimeSkewFromMedian & 499106.0 & -0.97 & 3.16 & -1.00e+01 & -1.80 & 0.00 & 0.94 & 2.97 \\
+        ResponseTimeTimeSkewFromMode & 499106.0 & -0.06 & 3.20 & -1.00e+01 & 0.39 & 0.91 & 1.31 & 5.43 \\
+        ResponseTimeTimeCoefficientofVariation & 499106.0 & 1.11 & 1.74 & 0.00 & 0.55 & 0.81 & 1.21 & 6.63 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\subsubsection{Observaciones Clave}
+
+Del análisis de las estadísticas descriptivas se pueden extraer las siguientes observaciones:
+
+\begin{enumerate}
+    \item \textbf{Datos de flujo (Flow)}: Las características de flujo presentan alta variabilidad y rango dinámico considerable (máximos en orden de $10^6$ a $10^7$), indicativo de la naturaleza heterogénea del tráfico de red.
+    
+    \item \textbf{Datos de longitud de paquete}: Muestran distribuciones más compactas, con medias alrededor de 173 bytes y desviaciones estándar moderadas. Los valores de asimetría (skewness) indican distribuciones no normales.
+    
+    \item \textbf{Datos temporales}: Las características de tiempo de paquete y tiempo de respuesta exhiben valores muy pequeños (en orden de milisegundos) con altos coeficientes de variación, reflejando la naturaleza temporal del tráfico de red.
+    
+    \item \textbf{Distribuciones asimétricas}: Múltiples características presentan valores de asimetría (skewness) significativos, sugiriendo la necesidad de normalización o transformación en la etapa de preprocesamiento.
+    
+    \item \textbf{Valores atípicos}: La presencia de máximos muy alejados de la mediana en varias características indica la existencia de outliers que requieren análisis y posible tratamiento.
+\end{enumerate}
+
+\section{Arquitectura del Sistema}\label{sec:arquitectura}
+
+El sistema propuesto sigue una arquitectura modular con las siguientes etapas:
+
+\begin{enumerate}
+    \item \textbf{Adquisición de datos}: Carga del dataset BBCC CIRA CIC DOHBRW 2020
+    \item \textbf{Preprocesamiento}: Limpieza, normalización y tratamiento de valores faltantes
+    \item \textbf{Ingeniería de características}: Selección y transformación de características relevantes
+    \item \textbf{División de datos}: Partición en conjuntos de entrenamiento y prueba
+    \item \textbf{Entrenamiento de modelos}: Aplicación de algoritmos de machine learning
+    \item \textbf{Evaluación}: Validación del rendimiento mediante métricas estándar
+    \item \textbf{Predicción}: Uso del modelo entrenado para detectar malware en nuevos flujos de red
+\end{enumerate}
+
+\section{Preprocesamiento de Datos}\label{sec:preprocesamiento}
+
+\subsection{Tratamiento de Valores Faltantes}
+
+Un análisis preliminar del dataset no reveló valores faltantes (NaN) significativos en las características numéricas, lo que facilita el procesamiento sin necesidad de imputación compleja.
+
+\subsection{Normalización y Estandarización}
+
+Dada la heterogeneidad en los rangos de valores entre características (FlowBytesSent en el rango de $[55, 8.01 \times 10^6]$ versus ResponseTimeTimeMean en el rango de $[4.88 \times 10^{-6}, 2.80]$), se aplicó estandarización mediante:
+
+\[
+x' = \frac{x - \mu}{\sigma}
+\]
+
+donde $\mu$ es la media y $\sigma$ la desviación estándar de cada característica. Esto asegura que todos los features tengan peso comparable durante el entrenamiento de los modelos.
+
+\subsection{Tratamiento de Outliers}
+
+Se identificaron y analizaron valores atípicos utilizando el método del rango intercuartílico (IQR). Dependiendo del modelo, se decidió retener estos valores como información valiosa del comportamiento anómalo característico del malware.
+
+\section{Ingeniería de Características}\label{sec:ingenieria_caracteristicas}
+
+\subsection{Selección de Características}
+
+Las 28 características del dataset original fueron consideradas en su totalidad, organizadas en 4 categorías principales:
+
+\begin{table}[H]
+    \centering
+    \caption{Categorización de características por tipo}
+    \label{tab:feature_categories}
+    \begin{tabular}{|l|l|r|}
+        \hline
+        \textbf{Categoría} & \textbf{Descripción} & \textbf{Número} \\
+        \hline
+        Flujo de Red & Estadísticas de bytes y tasa de transferencia & 4 \\
+        Longitud de Paquete & Estadísticas sobre tamaños de paquete & 8 \\
+        Temporales (Paquete) & Estadísticas temporales entre paquetes & 8 \\
+        Temporales (Respuesta) & Estadísticas de tiempo de respuesta & 8 \\
+        \hline
+        \textbf{Total} & & \textbf{28} \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Todas las características fueron incluidas en el modelo sin eliminación previa, permitiendo que los algoritmos de machine learning realicen la selección implícita durante el entrenamiento.
+
+\subsection{Transformaciones Aplicadas}
+
+Se aplicaron las siguientes transformaciones:
+
+\begin{itemize}
+    \item \textbf{Estandarización Z-score}: Para algoritmos sensibles a escala (SVM, KNN, redes neuronales)
+    \item \textbf{Normalización Min-Max}: Para algoritmos basados en distancia: $x' = \frac{x - x_{min}}{x_{max} - x_{min}}$
+    \item \textbf{Log-scaling}: Para características con distribuciones altamente sesgadas, transformación $x' = \log(x + 1)$
+\end{itemize}
+
+\section{División de Datos}\label{sec:division_datos}
+
+El dataset se dividió en:
+
+\begin{itemize}
+    \item \textbf{Conjunto de entrenamiento}: 70\% de los datos (349,374 instancias)
+    \item \textbf{Conjunto de prueba}: 30\% de los datos (149,732 instancias)
+\end{itemize}
+
+Se utilizó muestreo estratificado para mantener la distribución de clases en ambos conjuntos, asegurando representatividad.
+
+\section{Métricas de Evaluación}\label{sec:metricas}
+
+El rendimiento del sistema fue evaluado mediante las siguientes métricas:
+
+\begin{itemize}
+    \item \textbf{Exactitud (Accuracy)}: $\text{Acc} = \frac{TP + TN}{TP + TN + FP + FN}$
+    \item \textbf{Precisión}: $\text{Precision} = \frac{TP}{TP + FP}$
+    \item \textbf{Sensibilidad (Recall)}: $\text{Recall} = \frac{TP}{TP + FN}$
+    \item \textbf{F1-Score}: $\text{F1} = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}$
+    \item \textbf{Matriz de Confusión}: Para análisis detallado de aciertos y fallos
+    \item \textbf{Curva ROC-AUC}: Para evaluar rendimiento a diferentes umbrales de clasificación
+\end{itemize}
+
+donde TP (True Positives), TN (True Negatives), FP (False Positives) y FN (False Negatives) corresponden a los resultados de la clasificación.
